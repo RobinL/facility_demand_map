@@ -1,0 +1,55 @@
+shp2pgsql -I -s 27700 /Users/robinlinacre/Documents/shapefiles/bdline_essh_gb/Data/GB/european_region_region.shp police.euro_areas.las | psql -d postgres
+
+drop table if exists police.eng_sct_wales;
+create table police.eng_sct_wales as 
+select ST_Simplify(ST_union(ST_SnapToGrid(geom,0.001)),50) as geom, substring(code,1,1) as country_first_letter from police.euro_areas2
+group by substring(code,1,1);
+
+CREATE INDEX police_eng_sct_wales_gix ON police.eng_sct_wales USING GIST (geom);
+
+
+//Select only points in england and wales
+
+
+select  row_number() over (), count(*), ST_SnapToGrid(geom, 10000) as geom_grid 
+from (select * from police.police_data where month = '2016-01' and geom is not null) as a 
+group by geom_grid
+order by count(*) desc
+
+
+
+
+
+drop table if exists police.demand_for_prison_detail;
+create table police.demand_for_prison_detail as
+select row_number as id, demand_for_prison, geom_grid as geom, country_first_letter, 
+ST_X(ST_TRANSFORM(geom_grid, 4326)) as lng,
+ST_Y(ST_TRANSFORM(geom_grid,4326)) as lat
+from
+(select  row_number() over (),  count(*) as demand_for_prison, ST_SnapToGrid(geom, 1000) as geom_grid 
+from (select * from police.police_data where 
+
+(month = '2015-01' or
+month = '2015-02' or
+month = '2015-03' or
+month = '2015-04' or
+month = '2015-05' or
+month = '2015-06' or
+month = '2015-07' or
+month = '2015-08' or
+month = '2015-09' or
+month = '2015-10' or
+month = '2015-11' or
+month = '2015-12' or
+month = '2016-01' or
+month = '2016-02' or
+month = '2016-03' or
+month = '2016-04')
+
+ and geom is not null) as a 
+group by geom_grid
+order by count(*) desc) as point 
+left join police.eng_sct_wales as ews
+on st_contains(ews.geom, point.geom_grid)
+where country_first_letter = 'E' or country_first_letter = 'W';
+
